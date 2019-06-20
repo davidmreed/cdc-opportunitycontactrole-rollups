@@ -40,16 +40,9 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
                     if (evt.OpportunityId != null) shadowOCR.Opportunity__c = evt.OpportunityId;
 
                     for (String s: evt.ChangeEventHeader.getNulledFields()) {
-                        switch on (s) {
-                            when 'Role' {
-                                shadowOCR.Role__c = null;
-                            }
-                            when 'ContactId' {
-                                shadowOCR.Contact__c = null;
-                            }
-                            when 'OpportunityId' {
-                                shadowOCR.Opportunity__c = null;
-                            }
+                        // Fields other than Role can't be nulled.
+                        if (s == 'Role') {
+                            shadowOCR.Role__c = null;
                         }
                     }
                 }
@@ -57,19 +50,15 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
             when 'DELETE' {
                 // Mark our corresponding shadow records for deletion.
                 List<String> deletes = evt.ChangeEventHeader.getRecordIds();
-
-                // If we have any other events for these records, remove those shadow updates.
                 for (Id thisId : deletes) {
                     deleteIds.add(thisId);
+                    // Remove them from our maps.
                     if (createMap.containsKey(thisId)) createMap.remove(thisId);
                     if (updateMap.containsKey(thisId)) updateMap.remove(thisId);
                 }
             }
-            when 'UNDELETE' {
-                // Treat like a create?
-            }
+            // OpportunityContactRole does not support undelete.
         }
-         
     }
 
     insert createMap.values();
