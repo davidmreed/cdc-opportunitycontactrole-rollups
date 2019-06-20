@@ -4,9 +4,7 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
 
     for (OpportunityContactRoleChangeEvent evt : Trigger.new) {
         // For each change event, mirror updates to our shadow table.
-        // 
-    	System.debug(JSON.serialize(evt));
-		System.debug(evt.ChangeEventHeader.getChangeType());
+
         switch on (evt.ChangeEventHeader.getChangeType()) {
             when 'CREATE' {
                 // This is guaranteed to be the first event for this record in this transaction.
