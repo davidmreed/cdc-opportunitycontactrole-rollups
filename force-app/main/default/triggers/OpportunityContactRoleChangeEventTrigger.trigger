@@ -1,15 +1,16 @@
 trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChangeEvent (after insert) {
-    Map<Id, Shadow_Opportunity_Contact_Role__c> updateMap = new Map<Id, Shadow_Opportunity_Contact_Role__c>();
-    Map<Id, Shadow_Opportunity_Contact_Role__c> createMap = new Map<Id, Shadow_Opportunity_Contact_Role__c>();
+    Map<Id, Shadow_Opportunity_Contact_Role__c> createUpdateMap = new Map<Id, Shadow_Opportunity_Contact_Role__c>();
     Set<Id> deleteIds = new Set<Id>();
 
     for (OpportunityContactRoleChangeEvent evt : Trigger.new) {
         // For each change event, mirror updates to our shadow table.
-
+        // 
+    	System.debug(JSON.serialize(evt));
+		System.debug(evt.ChangeEventHeader.getChangeType());
         switch on (evt.ChangeEventHeader.getChangeType()) {
             when 'CREATE' {
                 // This is guaranteed to be the first event for this record in this transaction.
-                // Add all records to the createMap.
+                // Add all records to the createUpdateMap.
                 for (Id recordId : evt.ChangeEventHeader.getRecordIds()) {
                     Shadow_Opportunity_Contact_Role__c shadowOCR = new Shadow_Opportunity_Contact_Role__c(
                         Opportunity_Contact_Role_Id__c = recordId,
@@ -17,7 +18,7 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
                         Role__c = evt.Role,
                         Contact__c = evt.ContactId
                     );
-                    createMap.put(recordId, shadowOCR);
+                    createUpdateMap.put(recordId, shadowOCR);
                 }
             }
             when 'UPDATE' {
@@ -26,24 +27,24 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
                 for (Id recordId : evt.ChangeEventHeader.getRecordIds()) {
                     Shadow_Opportunity_Contact_Role__c shadowOCR;
 
-                    if (createMap.containsKey(recordId)) {
-                        shadowOCR = createMap.get(recordId);
-                    } else {
-                        shadowOCR = new Shadow_Opportunity_Contact_Role__c(
-                            Opportunity_Contact_Role_Id__c = recordId
+                    if (!createUpdateMap.containsKey(recordId)) {
+                        createUpdateMap.put(
+                            recordId, 
+                            new Shadow_Opportunity_Contact_Role__c(
+                                Opportunity_Contact_Role_Id__c = recordId
+                            )
                         );
-                        updateMap.put(recordId, shadowOCR);
                     }
+
+                    shadowOCR = createUpdateMap.get(recordId);
                     
                     if (evt.Role != null) shadowOCR.Role__c = evt.Role;
                     if (evt.ContactId != null) shadowOCR.Contact__c = evt.ContactId;
-                    if (evt.OpportunityId != null) shadowOCR.Opportunity__c = evt.OpportunityId;
+                    // OpportunityContactRole is reparentable for Contact, but not Opportunity
 
-                    for (String s: evt.ChangeEventHeader.getNulledFields()) {
+                    if (evt.ChangeEventHeader.getNulledFields().contains('Role')) {
                         // Fields other than Role can't be nulled.
-                        if (s == 'Role') {
-                            shadowOCR.Role__c = null;
-                        }
+                        shadowOCR.Role__c = null;
                     }
                 }
             }
@@ -52,17 +53,15 @@ trigger OpportunityContactRoleChangeEventTrigger on OpportunityContactRoleChange
                 List<String> deletes = evt.ChangeEventHeader.getRecordIds();
                 for (Id thisId : deletes) {
                     deleteIds.add(thisId);
-                    // Remove them from our maps.
-                    if (createMap.containsKey(thisId)) createMap.remove(thisId);
-                    if (updateMap.containsKey(thisId)) updateMap.remove(thisId);
+                    // Remove it from our map.
+                    createUpdateMap.remove(thisId);
                 }
             }
             // OpportunityContactRole does not support undelete.
         }
     }
 
-    insert createMap.values();
-    upsert updateMap.values() Opportunity_Contact_Role_Id__c;
+    upsert createUpdateMap.values() Opportunity_Contact_Role_Id__c;
     delete [
         SELECT Id
         FROM Shadow_Opportunity_Contact_Role__c
